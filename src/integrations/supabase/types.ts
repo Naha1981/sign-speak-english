@@ -14,16 +14,195 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      eng_words: {
+        Row: {
+          chunk_id: string
+          created_at: string
+          end_sec: number
+          id: string
+          start_sec: number
+          word: string
+          word_order: number
+        }
+        Insert: {
+          chunk_id: string
+          created_at?: string
+          end_sec?: number
+          id?: string
+          start_sec?: number
+          word: string
+          word_order?: number
+        }
+        Update: {
+          chunk_id?: string
+          created_at?: string
+          end_sec?: number
+          id?: string
+          start_sec?: number
+          word?: string
+          word_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eng_words_chunk_id_fkey"
+            columns: ["chunk_id"]
+            isOneToOne: false
+            referencedRelation: "saslgloss_chunks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          title: string
+          updated_at: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          title: string
+          updated_at?: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saslgloss_chunks: {
+        Row: {
+          created_at: string
+          end_sec: number
+          english_text: string
+          id: string
+          lesson_id: string
+          sasl_gloss: string | null
+          sort_order: number
+          start_sec: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_sec?: number
+          english_text?: string
+          id?: string
+          lesson_id: string
+          sasl_gloss?: string | null
+          sort_order?: number
+          start_sec?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_sec?: number
+          english_text?: string
+          id?: string
+          lesson_id?: string
+          sasl_gloss?: string | null
+          sort_order?: number
+          start_sec?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saslgloss_chunks_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      videos: {
+        Row: {
+          created_at: string
+          created_by: string
+          grade_level: string
+          id: string
+          language: string
+          status: string
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          grade_level?: string
+          id?: string
+          language?: string
+          status?: string
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          grade_level?: string
+          id?: string
+          language?: string
+          status?: string
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "learner"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +329,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "learner"],
+    },
   },
 } as const
