@@ -45,6 +45,8 @@ type Props = {
   lessonId: string;
 };
 
+const BASE_API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   const [lessonData, setLessonData] = useState<LessonFullOut | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   // ===================
   useEffect(() => {
     const loadLesson = async () => {
-      const response = await fetch(`http://localhost:8000/lessons/${lessonId}`);
+      const response = await fetch(`${BASE_API_URL}/lessons/${lessonId}`);
       if (!response.ok) {
         throw new Error("Could not load lesson");
       }

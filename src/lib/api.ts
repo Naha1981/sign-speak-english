@@ -1,3 +1,5 @@
+const BASE_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 export type UploadVideoDto = {
   title: string;
   grade_level: string;
@@ -17,7 +19,7 @@ export async function uploadVideoToBackend(
   storage_url: string;
   duration_sec: number;
 }> {
-  const response = await fetch('http://localhost:8000/videos/upload', {
+  const response = await fetch(`${BASE_API_URL}/videos/upload`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

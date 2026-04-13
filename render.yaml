@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: sasl-read-backend
+    runtime: python3
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AI_SERVICE_URL
+        value: http://localhost:8080/predict
+      - key: FRONTEND_URL
+        value: http://localhost:3000
