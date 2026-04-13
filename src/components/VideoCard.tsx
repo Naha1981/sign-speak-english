@@ -1,7 +1,7 @@
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit, Eye, Send, Video } from 'lucide-react';
+import { Edit, Eye, Send, Video, Undo2, Trash2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 
 interface VideoCardProps {
@@ -13,9 +13,11 @@ interface VideoCardProps {
   lessonId?: string | null;
   isAdmin?: boolean;
   onPublish?: (id: string) => void;
+  onUnpublish?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function VideoCard({ id, title, gradeLevel, status, thumbnailUrl, lessonId, isAdmin, onPublish }: VideoCardProps) {
+export function VideoCard({ id, title, gradeLevel, status, thumbnailUrl, lessonId, isAdmin, onPublish, onUnpublish, onDelete }: VideoCardProps) {
   return (
     <Card className="group overflow-hidden transition-all hover:shadow-lg hover:ring-2 hover:ring-primary/20">
       <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
@@ -36,7 +38,7 @@ export function VideoCard({ id, title, gradeLevel, status, thumbnailUrl, lessonI
         <p className="mt-1 text-base text-muted-foreground">{gradeLevel}</p>
       </CardContent>
       {isAdmin && (
-        <CardFooter className="gap-2 p-5 pt-0">
+        <CardFooter className="flex-wrap gap-2 p-5 pt-0">
           {lessonId ? (
             <Button variant="outline" size="lg" asChild className="flex-1">
               <Link to="/editor/$lessonId" params={{ lessonId }}>
@@ -46,7 +48,7 @@ export function VideoCard({ id, title, gradeLevel, status, thumbnailUrl, lessonI
             </Button>
           ) : (
             <Button variant="outline" size="lg" asChild className="flex-1">
-              <Link to="/upload" search={{ videoId: id }}>
+              <Link to="/upload">
                 <Edit className="mr-2 h-4 w-4" />
                 Create Lesson
               </Link>
@@ -64,6 +66,17 @@ export function VideoCard({ id, title, gradeLevel, status, thumbnailUrl, lessonI
             <Button size="lg" onClick={() => onPublish(id)} className="flex-1">
               <Send className="mr-2 h-4 w-4" />
               Publish
+            </Button>
+          )}
+          {status === 'published' && onUnpublish && (
+            <Button variant="secondary" size="lg" onClick={() => onUnpublish(id)} className="flex-1">
+              <Undo2 className="mr-2 h-4 w-4" />
+              Unpublish
+            </Button>
+          )}
+          {onDelete && (
+            <Button variant="ghost" size="icon" onClick={() => onDelete(id)} className="text-destructive hover:text-destructive">
+              <Trash2 className="h-5 w-5" />
             </Button>
           )}
         </CardFooter>

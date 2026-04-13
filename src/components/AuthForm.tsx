@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BookOpen, Loader2 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 
 interface AuthFormProps {
   onSignIn: (email: string, password: string) => Promise<void>;
@@ -28,7 +29,7 @@ export function AuthForm({ onSignIn, onSignUp }: AuthFormProps) {
         await onSignIn(email, password);
       } else {
         await onSignUp(email, password);
-        setSuccess('Account created! Check your email to confirm, then sign in.');
+        setSuccess('Account created! You can now sign in.');
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -100,6 +101,14 @@ export function AuthForm({ onSignIn, onSignUp }: AuthFormProps) {
                 {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {isLogin ? 'Sign In' : 'Create Account'}
               </Button>
+
+              {isLogin && (
+                <p className="text-center">
+                  <Link to="/reset-password" className="text-base text-primary font-semibold hover:underline">
+                    Forgot your password?
+                  </Link>
+                </p>
+              )}
 
               <p className="text-center text-base text-muted-foreground">
                 {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}

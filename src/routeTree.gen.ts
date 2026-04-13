@@ -10,15 +10,28 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LessonsRouteImport } from './routes/lessons'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlayLessonIdRouteImport } from './routes/play.$lessonId'
 import { Route as EditorLessonIdRouteImport } from './routes/editor.$lessonId'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
 
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LessonsRoute = LessonsRouteImport.update({
@@ -46,12 +59,20 @@ const EditorLessonIdRoute = EditorLessonIdRouteImport.update({
   path: '/editor/$lessonId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/lessons': typeof LessonsRoute
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/upload': typeof UploadRoute
+  '/admin/users': typeof AdminUsersRoute
   '/editor/$lessonId': typeof EditorLessonIdRoute
   '/play/$lessonId': typeof PlayLessonIdRoute
 }
@@ -59,7 +80,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/lessons': typeof LessonsRoute
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/upload': typeof UploadRoute
+  '/admin/users': typeof AdminUsersRoute
   '/editor/$lessonId': typeof EditorLessonIdRoute
   '/play/$lessonId': typeof PlayLessonIdRoute
 }
@@ -68,7 +92,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/lessons': typeof LessonsRoute
+  '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/upload': typeof UploadRoute
+  '/admin/users': typeof AdminUsersRoute
   '/editor/$lessonId': typeof EditorLessonIdRoute
   '/play/$lessonId': typeof PlayLessonIdRoute
 }
@@ -78,7 +105,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/lessons'
+    | '/profile'
+    | '/reset-password'
     | '/upload'
+    | '/admin/users'
     | '/editor/$lessonId'
     | '/play/$lessonId'
   fileRoutesByTo: FileRoutesByTo
@@ -86,7 +116,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/lessons'
+    | '/profile'
+    | '/reset-password'
     | '/upload'
+    | '/admin/users'
     | '/editor/$lessonId'
     | '/play/$lessonId'
   id:
@@ -94,7 +127,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/lessons'
+    | '/profile'
+    | '/reset-password'
     | '/upload'
+    | '/admin/users'
     | '/editor/$lessonId'
     | '/play/$lessonId'
   fileRoutesById: FileRoutesById
@@ -103,7 +139,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LessonsRoute: typeof LessonsRoute
+  ProfileRoute: typeof ProfileRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   UploadRoute: typeof UploadRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   EditorLessonIdRoute: typeof EditorLessonIdRoute
   PlayLessonIdRoute: typeof PlayLessonIdRoute
 }
@@ -115,6 +154,20 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/lessons': {
@@ -152,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EditorLessonIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -159,7 +219,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LessonsRoute: LessonsRoute,
+  ProfileRoute: ProfileRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   UploadRoute: UploadRoute,
+  AdminUsersRoute: AdminUsersRoute,
   EditorLessonIdRoute: EditorLessonIdRoute,
   PlayLessonIdRoute: PlayLessonIdRoute,
 }

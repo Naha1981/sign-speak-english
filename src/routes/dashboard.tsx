@@ -85,6 +85,39 @@ function DashboardPage() {
     }
   };
 
+  const handleUnpublish = async (videoId: string) => {
+    const { error } = await supabase
+      .from('videos')
+      .update({ status: 'draft' })
+      .eq('id', videoId);
+    if (error) {
+      toast.error('Failed to unpublish');
+    } else {
+      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'draft' } : v));
+      toast.success('Video set to draft');
+    }
+  };
+
+  const handleDelete = async (videoId: string) => {
+    if (!confirm('Are you sure you want to delete this video and its lesson? This cannot be undone.')) return;
+
+    // Delete lesson + chunks + words first (cascading)
+    const video = videos.find(v => v.id === videoId);
+    if (video?.lessonId) {
+      // eng_words cascade from chunks, chunks cascade from lessons
+      await supabase.from('lesson_progress').delete().eq('lesson_id', video.lessonId);
+      await supabase.from('lessons').delete().eq('id', video.lessonId);
+    }
+
+    const { error } = await supabase.from('videos').delete().eq('id', videoId);
+    if (error) {
+      toast.error('Failed to delete video');
+    } else {
+      setVideos(prev => prev.filter(v => v.id !== videoId));
+      toast.success('Video deleted');
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -133,6 +166,8 @@ function DashboardPage() {
                 lessonId={v.lessonId}
                 isAdmin
                 onPublish={handlePublish}
+                onUnpublish={handleUnpublish}
+                onDelete={handleDelete}
               />
             ))}
           </div>

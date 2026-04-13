@@ -6,8 +6,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from '@tanstack/react-router';
-import { Loader2, Play, Video, CheckCircle2 } from 'lucide-react';
+import { Loader2, Play, Video, CheckCircle2, Filter } from 'lucide-react';
 
 export const Route = createFileRoute('/lessons')({
   head: () => ({
@@ -31,6 +32,7 @@ function LessonsPage() {
   const { user, role, loading: authLoading, signOut } = useAuth();
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [gradeFilter, setGradeFilter] = useState('all');
 
   useEffect(() => {
     async function load() {
@@ -41,7 +43,6 @@ function LessonsPage() {
         .select('id, title, videos(grade_level, thumbnail_url, status)')
         .order('created_at', { ascending: false });
 
-      // Fetch progress
       const { data: progressData } = await supabase
         .from('lesson_progress')
         .select('lesson_id, completed')
@@ -71,8 +72,14 @@ function LessonsPage() {
     if (!authLoading && user) load();
   }, [user, role, authLoading]);
 
-  const completedCount = lessons.filter(l => l.completed).length;
-  const progressPercent = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
+  const filteredLessons = gradeFilter === 'all'
+    ? lessons
+    : lessons.filter(l => l.gradeLevel === gradeFilter);
+
+  const completedCount = filteredLessons.filter(l => l.completed).length;
+  const progressPercent = filteredLessons.length > 0 ? Math.round((completedCount / filteredLessons.length) * 100) : 0;
+
+  const gradeOptions = [...new Set(lessons.map(l => l.gradeLevel))].sort();
 
   if (authLoading || loading) {
     return (
@@ -86,30 +93,53 @@ function LessonsPage() {
     <div className="min-h-screen bg-background">
       <AppHeader user={user} role={role} onSignOut={signOut} />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <h1 className="text-3xl font-bold text-foreground">Lessons</h1>
-        <p className="mt-2 text-lg text-muted-foreground">Watch SASL videos and learn English</p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Lessons</h1>
+            <p className="mt-2 text-lg text-muted-foreground">Watch SASL videos and learn English</p>
+          </div>
+
+          {gradeOptions.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-muted-foreground" />
+              <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                <SelectTrigger className="h-10 w-44">
+                  <SelectValue placeholder="All Grades" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Grades</SelectItem>
+                  {gradeOptions.map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
 
         {/* Progress bar */}
-        {lessons.length > 0 && role === 'learner' && (
+        {filteredLessons.length > 0 && role === 'learner' && (
           <div className="mt-6 rounded-xl bg-card p-5 shadow ring-1 ring-border">
             <div className="flex items-center justify-between text-base font-semibold">
               <span className="text-foreground">Your Progress</span>
-              <span className="text-primary">{completedCount} / {lessons.length} completed</span>
+              <span className="text-primary">{completedCount} / {filteredLessons.length} completed</span>
             </div>
             <Progress value={progressPercent} className="mt-3 h-3" />
           </div>
         )}
 
-        {lessons.length === 0 ? (
+        {filteredLessons.length === 0 ? (
           <div className="mt-16 text-center">
-            <p className="text-xl text-muted-foreground">No lessons available yet. Check back soon!</p>
+            <p className="text-xl text-muted-foreground">
+              {lessons.length === 0 ? 'No lessons available yet. Check back soon!' : 'No lessons match this filter.'}
+            </p>
           </div>
         ) : (
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {lessons.map(lesson => (
+            {filteredLessons.map(lesson => (
               <Card key={lesson.id} className="group relative overflow-hidden transition-all hover:shadow-lg hover:ring-2 hover:ring-primary/20">
                 {lesson.completed && (
-                  <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1 text-sm font-semibold text-white">
+                  <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-success px-3 py-1 text-sm font-semibold text-success-foreground">
                     <CheckCircle2 className="h-4 w-4" />
                     Done
                   </div>

@@ -1,13 +1,13 @@
 import { Link } from '@tanstack/react-router';
-import { LogOut, BookOpen, Video, Upload, Menu } from 'lucide-react';
+import { LogOut, BookOpen, Video, Upload, Menu, Users, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import type { AppRole } from '@/hooks/use-auth';
-import type { User } from '@supabase/supabase-js';
+import type { User as SupaUser } from '@supabase/supabase-js';
 import { useState } from 'react';
 
 interface AppHeaderProps {
-  user: User | null;
+  user: SupaUser | null;
   role: AppRole | null;
   onSignOut: () => void;
 }
@@ -31,6 +31,12 @@ function NavLinks({ role, onSignOut, onClose }: { role: AppRole | null; onSignOu
               Upload
             </Link>
           </Button>
+          <Button variant="ghost" size="lg" asChild onClick={handleClick}>
+            <Link to="/admin/users">
+              <Users className="mr-2 h-5 w-5" />
+              Learners
+            </Link>
+          </Button>
         </>
       )}
       {role === 'learner' && (
@@ -41,6 +47,12 @@ function NavLinks({ role, onSignOut, onClose }: { role: AppRole | null; onSignOu
           </Link>
         </Button>
       )}
+      <Button variant="ghost" size="lg" asChild onClick={handleClick}>
+        <Link to="/profile">
+          <User className="mr-2 h-5 w-5" />
+          Profile
+        </Link>
+      </Button>
       <Button variant="outline" size="lg" onClick={() => { onSignOut(); handleClick(); }}>
         <LogOut className="mr-2 h-5 w-5" />
         Sign Out
