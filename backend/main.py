@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from auth import require_admin, require_user
+from sasl_client import run_sasl_recognition_and_store
 from supabase_client import SERVICE_HEADERS, SUPABASE_URL, insert_row, query_table
 
 # === Load environment variables ===
@@ -120,30 +121,14 @@ def _simulate_ai_suggestions(video_id: str):
 
 
 def _run_ai_pipeline(video_id: str, video: dict):
-    if AI_SERVICE_URL:
-        try:
-            payload = {
-                "video_id": video_id,
-                "storage_url": video.get("storage_url") or video.get("video_url"),
-            }
-            response = requests.post(AI_SERVICE_URL, json=payload, timeout=20)
-            response.raise_for_status()
-            results = response.json()
+    start_sec = 0.0
+    end_sec = video.get("duration_sec") or 0.0
 
-            segments = results.get("segments") or results.get("predictions")
-            if isinstance(segments, list) and segments:
-                inserted = False
-                for item in segments:
-                    if isinstance(item, dict) and (item.get("start") is not None or item.get("start_sec") is not None):
-                        _insert_ai_suggestion(video_id, item)
-                        inserted = True
-
-                if inserted:
-                    return
-        except Exception:
-            pass
-
-    _simulate_ai_suggestions(video_id)
+    try:
+        run_sasl_recognition_and_store(video_id, start_sec, end_sec)
+    except Exception:
+        # Keep the route working even if the AI service is not available.
+        pass
 
 
 @app.post("/videos/upload", response_model=VideoOut)
