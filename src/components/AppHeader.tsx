@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { LogOut, BookOpen, Video, Upload, Menu, X } from 'lucide-react';
+import { LogOut, BookOpen, Video, Upload, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import type { AppRole } from '@/hooks/use-auth';
