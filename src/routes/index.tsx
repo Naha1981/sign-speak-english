@@ -5,6 +5,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { BookOpen, Users, Video } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
+import heroImage from '@/assets/hero-illustration.jpg';
 
 export const Route = createFileRoute('/')({
   head: () => ({
@@ -36,17 +37,45 @@ function Index() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader user={user} role={role} onSignOut={signOut} />
-      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            Welcome to SASL Read
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-xl text-muted-foreground">
-            Learn English through South African Sign Language videos with interactive karaoke-style lessons.
-          </p>
-        </div>
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-3">
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
+          <div className="grid items-center gap-8 lg:grid-cols-2">
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+                Learn English Through Sign Language
+              </h1>
+              <p className="mt-4 max-w-xl text-xl text-muted-foreground">
+                Watch SASL videos with karaoke-style word highlighting. No audio needed — learn at your own pace.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-4">
+                {role === 'admin' && (
+                  <Button size="lg" asChild className="h-14 px-8 text-lg">
+                    <Link to="/dashboard">Go to Dashboard</Link>
+                  </Button>
+                )}
+                <Button size="lg" variant={role === 'admin' ? 'outline' : 'default'} asChild className="h-14 px-8 text-lg">
+                  <Link to="/lessons">Browse Lessons</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="relative">
+              <img
+                src={heroImage}
+                alt="Children learning sign language in a classroom with karaoke-style text"
+                width={1920}
+                height={768}
+                className="rounded-2xl shadow-2xl ring-1 ring-border"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
+        <div className="grid gap-6 sm:grid-cols-3">
           <div className="flex flex-col items-center rounded-2xl bg-card p-8 text-center shadow-md ring-1 ring-border">
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
               <Video className="h-7 w-7 text-primary" />
@@ -69,18 +98,7 @@ function Index() {
             <p className="mt-2 text-base text-muted-foreground">Designed for Deaf learners with large fonts and high contrast</p>
           </div>
         </div>
-
-        <div className="mt-12 flex justify-center gap-4">
-          {role === 'admin' && (
-            <Button size="lg" asChild className="h-14 px-8 text-lg">
-              <Link to="/dashboard">Go to Dashboard</Link>
-            </Button>
-          )}
-          <Button size="lg" variant={role === 'admin' ? 'outline' : 'default'} asChild className="h-14 px-8 text-lg">
-            <Link to="/lessons">Browse Lessons</Link>
-          </Button>
-        </div>
-      </main>
+      </section>
     </div>
   );
 }

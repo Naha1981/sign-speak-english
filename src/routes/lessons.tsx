@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { Link } from '@tanstack/react-router';
-import { Loader2, Play, Video } from 'lucide-react';
+import { Loader2, Play, Video, CheckCircle2 } from 'lucide-react';
 
 export const Route = createFileRoute('/lessons')({
   head: () => ({
@@ -23,6 +24,7 @@ interface LessonItem {
   title: string;
   gradeLevel: string;
   thumbnailUrl: string | null;
+  completed: boolean;
 }
 
 function LessonsPage() {
@@ -32,22 +34,33 @@ function LessonsPage() {
 
   useEffect(() => {
     async function load() {
+      if (!user) return;
+
       const { data } = await supabase
         .from('lessons')
         .select('id, title, videos(grade_level, thumbnail_url, status)')
         .order('created_at', { ascending: false });
 
+      // Fetch progress
+      const { data: progressData } = await supabase
+        .from('lesson_progress')
+        .select('lesson_id, completed')
+        .eq('user_id', user.id)
+        .eq('completed', true);
+
+      const completedSet = new Set(progressData?.map(p => p.lesson_id) ?? []);
+
       if (data) {
         const items: LessonItem[] = [];
         for (const d of data) {
           const video = d.videos as unknown as { grade_level: string; thumbnail_url: string | null; status: string } | null;
-          // For learners, only show published; for admins, show all
           if (role === 'admin' || video?.status === 'published') {
             items.push({
               id: d.id,
               title: d.title,
               gradeLevel: video?.grade_level ?? 'Unknown',
               thumbnailUrl: video?.thumbnail_url ?? null,
+              completed: completedSet.has(d.id),
             });
           }
         }
@@ -57,6 +70,9 @@ function LessonsPage() {
     }
     if (!authLoading && user) load();
   }, [user, role, authLoading]);
+
+  const completedCount = lessons.filter(l => l.completed).length;
+  const progressPercent = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
 
   if (authLoading || loading) {
     return (
@@ -73,6 +89,17 @@ function LessonsPage() {
         <h1 className="text-3xl font-bold text-foreground">Lessons</h1>
         <p className="mt-2 text-lg text-muted-foreground">Watch SASL videos and learn English</p>
 
+        {/* Progress bar */}
+        {lessons.length > 0 && role === 'learner' && (
+          <div className="mt-6 rounded-xl bg-card p-5 shadow ring-1 ring-border">
+            <div className="flex items-center justify-between text-base font-semibold">
+              <span className="text-foreground">Your Progress</span>
+              <span className="text-primary">{completedCount} / {lessons.length} completed</span>
+            </div>
+            <Progress value={progressPercent} className="mt-3 h-3" />
+          </div>
+        )}
+
         {lessons.length === 0 ? (
           <div className="mt-16 text-center">
             <p className="text-xl text-muted-foreground">No lessons available yet. Check back soon!</p>
@@ -80,10 +107,16 @@ function LessonsPage() {
         ) : (
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {lessons.map(lesson => (
-              <Card key={lesson.id} className="group overflow-hidden transition-all hover:shadow-lg hover:ring-2 hover:ring-primary/20">
+              <Card key={lesson.id} className="group relative overflow-hidden transition-all hover:shadow-lg hover:ring-2 hover:ring-primary/20">
+                {lesson.completed && (
+                  <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1 text-sm font-semibold text-white">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Done
+                  </div>
+                )}
                 <div className="relative aspect-video bg-muted flex items-center justify-center">
                   {lesson.thumbnailUrl ? (
-                    <img src={lesson.thumbnailUrl} alt={lesson.title} className="h-full w-full object-cover" />
+                    <img src={lesson.thumbnailUrl} alt={lesson.title} className="h-full w-full object-cover" loading="lazy" />
                   ) : (
                     <Video className="h-12 w-12 text-muted-foreground/40" />
                   )}
@@ -94,7 +127,7 @@ function LessonsPage() {
                   <Button size="lg" className="mt-4 w-full h-12 text-lg" asChild>
                     <Link to="/play/$lessonId" params={{ lessonId: lesson.id }}>
                       <Play className="mr-2 h-5 w-5" />
-                      Start Lesson
+                      {lesson.completed ? 'Replay' : 'Start Lesson'}
                     </Link>
                   </Button>
                 </CardContent>

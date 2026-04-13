@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/use-auth';
+import { toast } from 'sonner';
 
 interface WordEntry {
   word: string;
@@ -27,11 +29,13 @@ interface KaraokePlayerProps {
 
 export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { user } = useAuth();
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [chunks, setChunks] = useState<ChunkEntry[]>([]);
   const [words, setWords] = useState<WordEntry[]>([]);
+  const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -51,25 +55,38 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
         })));
 
         const chunkIds = chunkData.map(c => c.id);
-        const { data: wordData } = await supabase
-          .from('eng_words')
-          .select('*')
-          .in('chunk_id', chunkIds)
-          .order('word_order');
+        if (chunkIds.length > 0) {
+          const { data: wordData } = await supabase
+            .from('eng_words')
+            .select('*')
+            .in('chunk_id', chunkIds)
+            .order('word_order');
 
-        if (wordData) {
-          setWords(wordData.map(w => ({
-            word: w.word,
-            start_sec: Number(w.start_sec),
-            end_sec: Number(w.end_sec),
-            word_order: w.word_order,
-            chunk_id: w.chunk_id,
-          })));
+          if (wordData) {
+            setWords(wordData.map(w => ({
+              word: w.word,
+              start_sec: Number(w.start_sec),
+              end_sec: Number(w.end_sec),
+              word_order: w.word_order,
+              chunk_id: w.chunk_id,
+            })));
+          }
         }
+      }
+
+      // Check existing progress
+      if (user) {
+        const { data: progress } = await supabase
+          .from('lesson_progress')
+          .select('completed')
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId)
+          .maybeSingle();
+        if (progress?.completed) setCompleted(true);
       }
     }
     load();
-  }, [lessonId]);
+  }, [lessonId, user]);
 
   const handleTimeUpdate = useCallback(() => {
     if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
@@ -100,12 +117,29 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
     if (videoRef.current) videoRef.current.playbackRate = newSpeed;
   };
 
-  // Find current chunk
+  const markComplete = async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from('lesson_progress')
+      .upsert({
+        user_id: user.id,
+        lesson_id: lessonId,
+        completed: true,
+        completed_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,lesson_id' });
+
+    if (error) {
+      toast.error('Failed to mark as complete');
+    } else {
+      setCompleted(true);
+      toast.success('Lesson marked as complete! 🎉');
+    }
+  };
+
   const activeChunk = chunks.find(
     c => currentTime >= c.start_sec && currentTime < c.end_sec
   );
 
-  // Get words for active chunk
   const activeWords = activeChunk
     ? words.filter(w => w.chunk_id === activeChunk.id)
     : [];
@@ -115,7 +149,6 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
       <div className="mx-auto w-full max-w-4xl flex-1 p-4 sm:p-6">
         <h1 className="mb-6 text-3xl font-bold text-foreground">{title}</h1>
 
-        {/* Video */}
         <div className="overflow-hidden rounded-2xl bg-foreground/5 shadow-xl">
           <video
             ref={videoRef}
@@ -127,7 +160,6 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
           />
         </div>
 
-        {/* Controls */}
         <div className="mt-6 flex items-center justify-center gap-4">
           <Button onClick={restart} variant="outline" size="lg">
             <RotateCcw className="mr-2 h-5 w-5" />
@@ -141,7 +173,6 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
           </Button>
         </div>
 
-        {/* SASL Gloss */}
         {activeChunk?.sasl_gloss && (
           <div className="mt-6 text-center">
             <p className="font-mono text-xl font-bold tracking-wider text-muted-foreground">
@@ -150,7 +181,6 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
           </div>
         )}
 
-        {/* Karaoke Text */}
         <div className="mt-6 rounded-2xl bg-card p-8 shadow-lg ring-1 ring-border">
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
             {activeWords.length > 0 ? (
@@ -178,6 +208,21 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
               </p>
             )}
           </div>
+        </div>
+
+        {/* Mark Complete */}
+        <div className="mt-8 flex justify-center">
+          {completed ? (
+            <div className="flex items-center gap-2 rounded-xl bg-green-600/10 px-6 py-3 text-lg font-semibold text-green-600">
+              <CheckCircle2 className="h-6 w-6" />
+              Lesson Completed
+            </div>
+          ) : (
+            <Button size="lg" onClick={markComplete} className="h-14 px-8 text-lg">
+              <CheckCircle2 className="mr-2 h-5 w-5" />
+              Mark as Complete
+            </Button>
+          )}
         </div>
       </div>
     </div>
