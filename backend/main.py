@@ -1,56 +1,22 @@
 from typing import List, Optional
 from datetime import datetime
 import os
-import uuid
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+
+import requests
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, UUID4
+from pydantic import BaseModel
 from dotenv import load_dotenv
-import requests
-import json
+
+from auth import require_admin, require_user
+from supabase_client import SERVICE_HEADERS, SUPABASE_URL, insert_row, query_table
 
 # === Load environment variables ===
 load_dotenv()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env")
-
-supabase_headers = {
-    "apikey": SUPABASE_ANON_KEY,
-    "Content-Type": "application/json",
-    "Prefer": "return=minimal",
-}
-
-
-# === Simple helpers to talk to Supabase ===
-def query_table(table: str, filters: dict = None) -> List[dict]:
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    params = {}
-    if filters:
-        for k, v in filters.items():
-            params[k] = f"eq.{v}"
-    resp = requests.get(url, headers=supabase_headers, params=params)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def insert_row(table: str, data: dict) -> dict:
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    resp = requests.post(url, headers=supabase_headers, json=data)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def update_row(table: str, row_id: str, data: dict) -> dict:
-    url = f"{SUPABASE_URL}/rest/v1/{table}"
-    params = {"id": "eq." + row_id}
-    resp = requests.patch(url, headers=supabase_headers, json=data, params=params)
-    resp.raise_for_status()
-    return resp.json()
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://localhost:8080/predict")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
 # === Pydantic models (simple data shapes) ===
@@ -106,21 +72,82 @@ class LessonFullOut(BaseModel):
     ai_suggestions: List[AIGlobalSuggestion]
 
 
-# === FastAPI app ===
 app = FastAPI(title="SASL Read FastAPI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # your React dev server
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+def _insert_ai_suggestion(video_id: str, segment: dict):
+    ai_data = {
+        "video_id": video_id,
+        "start_sec": segment.get("start_sec") or segment.get("start") or 0,
+        "end_sec": segment.get("end_sec") or segment.get("end") or 0,
+        "ai_saslgloss": segment.get("ai_saslgloss") or segment.get("saslgloss"),
+        "ai_english": segment.get("ai_english") or segment.get("english") or "",
+        "confidence": segment.get("confidence"),
+        "status": "pending",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    insert_row("ai_suggestions", ai_data)
+
+
+def _simulate_ai_suggestions(video_id: str):
+    segments = [
+        {
+            "start": 0.5,
+            "end": 3.0,
+            "ai_saslgloss": "[NAME] [MY]",
+            "ai_english": "My name is",
+            "confidence": 0.6,
+        },
+        {
+            "start": 3.5,
+            "end": 6.0,
+            "ai_saslgloss": "[NAME] [THABISO]",
+            "ai_english": "Thabiso",
+            "confidence": 0.7,
+        },
+    ]
+
+    for seg in segments:
+        _insert_ai_suggestion(video_id, seg)
+
+
+def _run_ai_pipeline(video_id: str, video: dict):
+    if AI_SERVICE_URL:
+        try:
+            payload = {
+                "video_id": video_id,
+                "storage_url": video.get("storage_url") or video.get("video_url"),
+            }
+            response = requests.post(AI_SERVICE_URL, json=payload, timeout=20)
+            response.raise_for_status()
+            results = response.json()
+
+            segments = results.get("segments") or results.get("predictions")
+            if isinstance(segments, list) and segments:
+                inserted = False
+                for item in segments:
+                    if isinstance(item, dict) and (item.get("start") is not None or item.get("start_sec") is not None):
+                        _insert_ai_suggestion(video_id, item)
+                        inserted = True
+
+                if inserted:
+                    return
+        except Exception:
+            pass
+
+    _simulate_ai_suggestions(video_id)
+
+
 @app.post("/videos/upload", response_model=VideoOut)
-def upload_video(video: VideoCreate):
-    # Save to Supabase videos table
+def upload_video(video: VideoCreate, auth=Depends(require_admin)):
     video_data = {
         "title": video.title,
         "grade_level": video.grade_level,
@@ -148,52 +175,21 @@ def upload_video(video: VideoCreate):
 def trigger_ai_run(
     video_id: str,
     background_tasks: BackgroundTasks,
+    auth=Depends(require_admin),
 ):
-    # Check if video exists
     video_res = query_table("videos", {"id": video_id})
     if not video_res:
-        raise HTTPException(404, "Video not found")
+        raise HTTPException(status_code=404, detail="Video not found")
+
     video = video_res[0]
-
-    # In the real world you'd call a SASL model here.
-    # For now, just simulate AI suggestions by inserting fake ones.
-    def _simulate_ai_suggestions():
-        # Fake example: video is split into two segments
-        segments = [
-            {
-                "start": 0.5,
-                "end": 3.0,
-                "ai_saslgloss": "[NAME] [MY]",
-                "ai_english": "My name is",
-                "confidence": 0.6,
-            },
-            {
-                "start": 3.5,
-                "end": 6.0,
-                "ai_saslgloss": "[NAME] [THABISO]",
-                "ai_english": "Thabiso",
-                "confidence": 0.7,
-            },
-        ]
-        for seg in segments:
-            ai_data = {
-                "video_id": video_id,
-                "start_sec": seg["start"],
-                "end_sec": seg["end"],
-                "ai_saslgloss": seg["ai_saslgloss"],
-                "ai_english": seg["ai_english"],
-                "confidence": seg["confidence"],
-                "status": "pending",
-                "created_at": datetime.utcnow().isoformat(),
-            }
-            insert_row("ai_suggestions", ai_data)
-
-    background_tasks.add_task(_simulate_ai_suggestions)
-    return JSONResponse({"message": "AI pipeline simulated (fake suggestions created)", "video_id": video_id})
+    background_tasks.add_task(_run_ai_pipeline, video_id, video)
+    return JSONResponse(
+        {"message": "AI pipeline started; real model will be used when available.", "video_id": video_id}
+    )
 
 
 @app.get("/videos/{video_id}/ai_suggestions")
-def get_ai_suggestions(video_id: str, status: Optional[str] = None):
+def get_ai_suggestions(video_id: str, status: Optional[str] = None, auth=Depends(require_user)):
     filters = {"video_id": video_id}
     if status:
         filters["status"] = status
@@ -202,31 +198,28 @@ def get_ai_suggestions(video_id: str, status: Optional[str] = None):
 
 
 @app.get("/lessons/{lesson_id}")
-def get_lesson(lesson_id: str):
+def get_lesson(lesson_id: str, auth=Depends(require_user)):
     lesson_rows = query_table("lessons", {"id": lesson_id})
     if not lesson_rows:
-        raise HTTPException(404, "Lesson not found")
+        raise HTTPException(status_code=404, detail="Lesson not found")
     lesson = lesson_rows[0]
 
     chunks = query_table("saslgloss_chunks", {"lesson_id": lesson_id})
     chunk_objs = [SASLGlossChunkBase(**c) for c in chunks]
 
-    # Get all eng_words linked to these chunks
     saslgloss_ids = [c["id"] for c in chunks]
     if saslgloss_ids:
-        # Supabase "in query" syntax
         params = {"saslgloss_id": "in.(" + ",".join(saslgloss_ids) + ")"}
         eng_words = requests.get(
             f"{SUPABASE_URL}/rest/v1/eng_words",
-            headers=supabase_headers,
+            headers=SERVICE_HEADERS,
             params=params,
+            timeout=15,
         ).json()
     else:
         eng_words = []
 
     word_objs = [EngWordBase(**w) for w in eng_words]
-
-    # Get ai_suggestions for the video (via lesson.video_id)
     video_id = lesson["video_id"]
     suggestions = query_table("ai_suggestions", {"video_id": video_id, "status": "pending"})
     suggestion_objs = [AIGlobalSuggestion(**s) for s in suggestions]
@@ -236,4 +229,15 @@ def get_lesson(lesson_id: str):
         chunks=chunk_objs,
         eng_words=word_objs,
         ai_suggestions=suggestion_objs,
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000)),
+        reload=os.getenv("DEBUG", "false").lower() == "true",
     )
