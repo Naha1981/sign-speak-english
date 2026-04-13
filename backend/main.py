@@ -4,6 +4,7 @@ import os
 import uuid
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, UUID4
 from dotenv import load_dotenv
 import requests
@@ -107,6 +108,14 @@ class LessonFullOut(BaseModel):
 
 # === FastAPI app ===
 app = FastAPI(title="SASL Read FastAPI Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # your React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/videos/upload", response_model=VideoOut)

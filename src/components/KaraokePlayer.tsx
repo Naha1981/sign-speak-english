@@ -5,77 +5,49 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 
-interface WordEntry {
-  word: string;
+interface EngWord {
+  eng_word: string;
   start_sec: number;
   end_sec: number;
-  word_order: number;
-  chunk_id: string;
+  saslgloss_id: string;
 }
 
-interface ChunkEntry {
-  id: string;
+interface SASLGlossChunk {
   start_sec: number;
   end_sec: number;
+  saslgloss?: string | null;
   english_text: string;
-  sasl_gloss: string | null;
 }
 
 interface KaraokePlayerProps {
   lessonId: string;
   videoUrl: string;
   title: string;
+  chunks: SASLGlossChunk[];
+  engWords: EngWord[];
 }
 
-export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps) {
+export function KaraokePlayer({ lessonId, videoUrl, title, chunks, engWords }: KaraokePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { user } = useAuth();
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1);
-  const [chunks, setChunks] = useState<ChunkEntry[]>([]);
-  const [words, setWords] = useState<WordEntry[]>([]);
   const [completed, setCompleted] = useState(false);
 
+  // Convert engWords to the expected format
+  const words = engWords.map((w, index) => ({
+    word: w.eng_word,
+    start_sec: w.start_sec,
+    end_sec: w.end_sec,
+    word_order: index,
+    chunk_id: w.saslgloss_id,
+  }));
+
   useEffect(() => {
-    async function load() {
-      const { data: chunkData } = await supabase
-        .from('saslgloss_chunks')
-        .select('*')
-        .eq('lesson_id', lessonId)
-        .order('sort_order');
-
-      if (chunkData) {
-        setChunks(chunkData.map(c => ({
-          id: c.id,
-          start_sec: Number(c.start_sec),
-          end_sec: Number(c.end_sec),
-          english_text: c.english_text,
-          sasl_gloss: c.sasl_gloss,
-        })));
-
-        const chunkIds = chunkData.map(c => c.id);
-        if (chunkIds.length > 0) {
-          const { data: wordData } = await supabase
-            .from('eng_words')
-            .select('*')
-            .in('chunk_id', chunkIds)
-            .order('word_order');
-
-          if (wordData) {
-            setWords(wordData.map(w => ({
-              word: w.word,
-              start_sec: Number(w.start_sec),
-              end_sec: Number(w.end_sec),
-              word_order: w.word_order,
-              chunk_id: w.chunk_id,
-            })));
-          }
-        }
-      }
-
-      // Check existing progress
-      if (user) {
+    // Check existing progress
+    if (user) {
+      const loadProgress = async () => {
         const { data: progress } = await supabase
           .from('lesson_progress')
           .select('completed')
@@ -83,9 +55,9 @@ export function KaraokePlayer({ lessonId, videoUrl, title }: KaraokePlayerProps)
           .eq('lesson_id', lessonId)
           .maybeSingle();
         if (progress?.completed) setCompleted(true);
-      }
+      };
+      loadProgress();
     }
-    load();
   }, [lessonId, user]);
 
   const handleTimeUpdate = useCallback(() => {
