@@ -68,10 +68,10 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
       // Fetch video URL from Supabase
       const { data: video } = await supabase
         .from('videos')
-        .select('storage_url')
+        .select('video_url')
         .eq('id', data.lesson.video_id)
         .single();
-      setVideoUrl(video?.storage_url ?? null);
+      setVideoUrl(video?.video_url ?? null);
     };
 
     loadLesson();

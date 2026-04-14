@@ -13,9 +13,10 @@ interface EngWord {
 }
 
 interface SASLGlossChunk {
+  id?: string;
   start_sec: number;
   end_sec: number;
-  saslgloss?: string | null;
+  sasl_gloss?: string | null;
   english_text: string;
 }
 
