@@ -35,9 +35,12 @@ export const Route = createRootRoute({
       { title: "SASL Read — Learn English Through Sign Language" },
       { name: "description", content: "Learn English through South African Sign Language videos" },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "SASL Read" },
+      { property: "og:title", content: "SASL Read — Learn English Through Sign Language" },
       { property: "og:description", content: "Learn English through South African Sign Language videos" },
       { property: "og:type", content: "website" },
+      { name: "twitter:title", content: "SASL Read — Learn English Through Sign Language" },
+      { name: "twitter:description", content: "Learn English through South African Sign Language videos" },
+      { name: "twitter:card", content: "summary" },
     ],
     links: [
       {
