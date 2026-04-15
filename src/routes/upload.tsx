@@ -10,7 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Upload, Loader2 } from 'lucide-react';
-import { uploadVideoToBackend } from '@/lib/api';
 
 export const Route = createFileRoute('/upload')({
   head: () => ({
@@ -21,8 +20,6 @@ export const Route = createFileRoute('/upload')({
   }),
   component: UploadPage,
 });
-
-const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
 
 function UploadPage() {
   const { user, role, loading: authLoading, signOut } = useAuth();
@@ -38,34 +35,6 @@ function UploadPage() {
     }
   }, [user, role, authLoading, navigate]);
 
-  function getVideoDuration(file: File): Promise<number> {
-    return new Promise<number>((resolve) => {
-      const objectUrl = URL.createObjectURL(file);
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-
-      const cleanup = () => URL.revokeObjectURL(objectUrl);
-
-      video.onloadedmetadata = () => {
-        cleanup();
-        resolve(video.duration || 0);
-      };
-      video.onerror = () => {
-        cleanup();
-        console.warn('[Upload] Could not read video duration, defaulting to 0');
-        resolve(0); // Don't block upload if duration can't be read
-      };
-
-      video.src = objectUrl;
-
-      // Safety timeout — resolve with 0 after 10s
-      setTimeout(() => {
-        cleanup();
-        resolve(0);
-      }, 10000);
-    });
-  }
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0] ?? null;
     if (selected && selected.type === 'video/webm') {
@@ -79,7 +48,7 @@ function UploadPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !file) return;
+    if (!user || !file || uploading) return;
 
     if (file.type === 'video/webm') {
       toast.error('WebM files are not supported. Please upload an MP4 video.');
@@ -88,17 +57,15 @@ function UploadPage() {
 
     setUploading(true);
     try {
-      // 1. Upload video to storage
+      // 1. Upload video to Supabase Storage
       const fileExt = file.name.split('.').pop();
       const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
-      console.log('[Upload] Uploading to storage:', filePath);
       const { error: uploadError } = await supabase.storage
         .from('videos')
         .upload(filePath, file);
 
       if (uploadError) {
-        console.error('[Upload] Storage error:', uploadError);
         throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
 
@@ -110,26 +77,29 @@ function UploadPage() {
         throw new Error('Unable to get public video URL');
       }
 
-      console.log('[Upload] Storage URL:', urlData.publicUrl);
+      // 2. Insert video record directly via Supabase
+      const { data: videoRecord, error: videoError } = await supabase
+        .from('videos')
+        .insert({
+          title,
+          grade_level: gradeLevel,
+          language: 'SASL',
+          status: 'draft',
+          video_url: urlData.publicUrl,
+          created_by: user.id,
+        })
+        .select()
+        .single();
 
-      // 2. Get video duration
-      const durationSec = await getVideoDuration(file);
-      console.log('[Upload] Duration:', durationSec);
+      if (videoError) {
+        throw new Error(`Failed to create video record: ${videoError.message}`);
+      }
 
-      // 3. Register with backend
-      const videoData = await uploadVideoToBackend({
-        title,
-        grade_level: gradeLevel,
-        storage_url: urlData.publicUrl,
-        duration_sec: durationSec,
-        is_published: false,
-      });
-
-      // 4. Create lesson in database
+      // 3. Create lesson record
       const { data: lesson, error: lessonError } = await supabase
         .from('lessons')
         .insert({
-          video_id: videoData.id,
+          video_id: videoRecord.id,
           title,
           created_by: user.id,
         })
@@ -137,7 +107,6 @@ function UploadPage() {
         .single();
 
       if (lessonError) {
-        console.error('[Upload] Lesson insert error:', lessonError);
         throw new Error(`Failed to create lesson: ${lessonError.message}`);
       }
 
