@@ -36,24 +36,12 @@ function UploadPage() {
   }, [user, role, authLoading, navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0] ?? null;
-    if (selected && selected.type === 'video/webm') {
-      toast.error('WebM files are not supported. Please upload an MP4 video.');
-      e.target.value = '';
-      setFile(null);
-      return;
-    }
-    setFile(selected);
+    setFile(e.target.files?.[0] ?? null);
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !file || uploading) return;
-
-    if (file.type === 'video/webm') {
-      toast.error('WebM files are not supported. Please upload an MP4 video.');
-      return;
-    }
 
     setUploading(true);
     try {
