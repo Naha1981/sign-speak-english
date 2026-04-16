@@ -36,24 +36,12 @@ function UploadPage() {
   }, [user, role, authLoading, navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0] ?? null;
-    if (selected && selected.type === 'video/webm') {
-      toast.error('WebM files are not supported. Please upload an MP4 video.');
-      e.target.value = '';
-      setFile(null);
-      return;
-    }
-    setFile(selected);
+    setFile(e.target.files?.[0] ?? null);
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !file || uploading) return;
-
-    if (file.type === 'video/webm') {
-      toast.error('WebM files are not supported. Please upload an MP4 video.');
-      return;
-    }
 
     setUploading(true);
     try {
@@ -174,16 +162,16 @@ function UploadPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="video" className="text-base font-semibold">Video File (MP4)</Label>
+                <Label htmlFor="video" className="text-base font-semibold">Video File</Label>
                 <Input
                   id="video"
                   type="file"
-                  accept="video/mp4,video/quicktime,video/x-msvideo"
+                  accept="video/*"
                   onChange={handleFileChange}
                   required
                   className="h-12 text-lg file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-base file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
                 />
-                <p className="text-sm text-muted-foreground">WebM is not supported — please use MP4.</p>
+                <p className="text-sm text-muted-foreground">Supports MP4, WebM, MOV, AVI and other video formats.</p>
               </div>
 
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-semibold" disabled={uploading || !file}>
