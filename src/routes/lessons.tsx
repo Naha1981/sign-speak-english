@@ -146,9 +146,11 @@ function LessonsPage() {
                     Done
                   </div>
                 )}
-                <div className="relative aspect-video bg-muted flex items-center justify-center">
+                <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
                   {lesson.thumbnailUrl ? (
                     <img src={lesson.thumbnailUrl} alt={lesson.title} className="h-full w-full object-cover" loading="lazy" />
+                  ) : lesson.videoUrl ? (
+                    <video src={lesson.videoUrl} className="h-full w-full object-cover" muted preload="metadata" />
                   ) : (
                     <Video className="h-12 w-12 text-muted-foreground/40" />
                   )}
