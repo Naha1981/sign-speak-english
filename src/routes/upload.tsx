@@ -162,16 +162,16 @@ function UploadPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="video" className="text-base font-semibold">Video File (MP4)</Label>
+                <Label htmlFor="video" className="text-base font-semibold">Video File</Label>
                 <Input
                   id="video"
                   type="file"
-                  accept="video/mp4,video/quicktime,video/x-msvideo"
+                  accept="video/*"
                   onChange={handleFileChange}
                   required
                   className="h-12 text-lg file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-base file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
                 />
-                <p className="text-sm text-muted-foreground">WebM is not supported — please use MP4.</p>
+                <p className="text-sm text-muted-foreground">Supports MP4, WebM, MOV, AVI and other video formats.</p>
               </div>
 
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-semibold" disabled={uploading || !file}>
