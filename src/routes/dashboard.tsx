@@ -5,7 +5,7 @@ import { VideoCard } from '@/components/VideoCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Users, ArrowLeft, Clock3, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from '@tanstack/react-router';
 
@@ -126,21 +126,67 @@ function DashboardPage() {
     );
   }
 
+  const draftCount = videos.filter((video) => video.status !== 'published').length;
+  const publishedCount = videos.filter((video) => video.status === 'published').length;
+  const needsLessonCount = videos.filter((video) => !video.lessonId).length;
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader user={user} role={role} onSignOut={signOut} />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Video Dashboard</h1>
-            <p className="mt-1 text-lg text-muted-foreground">Manage your SASL lesson videos</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">Admin studio</p>
+            <h1 className="mt-2 text-3xl font-bold text-foreground">Manage lesson publishing</h1>
+            <p className="mt-1 text-lg text-muted-foreground">Upload → edit segments → review timing → publish.</p>
           </div>
-          <Button size="lg" asChild className="h-12 text-lg">
-            <Link to="/upload">
-              <Plus className="mr-2 h-5 w-5" />
-              Upload Video
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button size="lg" variant="outline" asChild className="h-12 text-lg">
+              <Link to="/lessons">
+                <ArrowLeft className="mr-2 h-5 w-5" />
+                Learner View
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild className="h-12 text-lg">
+              <Link to="/admin/users">
+                <Users className="mr-2 h-5 w-5" />
+                Learners
+              </Link>
+            </Button>
+            <Button size="lg" asChild className="h-12 text-lg">
+              <Link to="/upload">
+                <Plus className="mr-2 h-5 w-5" />
+                Upload Video
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+            <div className="flex items-center gap-3 text-muted-foreground">
+              <Clock3 className="h-5 w-5" />
+              <span className="text-sm font-semibold uppercase tracking-[0.16em]">Drafts</span>
+            </div>
+            <p className="mt-3 text-3xl font-bold text-foreground">{draftCount}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Still needs review before learners can see it.</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+            <div className="flex items-center gap-3 text-muted-foreground">
+              <Send className="h-5 w-5" />
+              <span className="text-sm font-semibold uppercase tracking-[0.16em]">Published</span>
+            </div>
+            <p className="mt-3 text-3xl font-bold text-foreground">{publishedCount}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Live lessons available to learners right now.</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+            <div className="flex items-center gap-3 text-muted-foreground">
+              <Users className="h-5 w-5" />
+              <span className="text-sm font-semibold uppercase tracking-[0.16em]">Needs lesson</span>
+            </div>
+            <p className="mt-3 text-3xl font-bold text-foreground">{needsLessonCount}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Videos that still need lesson structure and timings.</p>
+          </div>
         </div>
 
         {videos.length === 0 ? (

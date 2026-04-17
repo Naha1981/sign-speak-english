@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/use-auth';
 import { AppHeader } from '@/components/AppHeader';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,11 +31,18 @@ interface LessonItem {
 
 function LessonsPage() {
   const { user, role, loading: authLoading, signOut } = useAuth();
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [gradeFilter, setGradeFilter] = useState('all');
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      setLoading(false);
+      navigate({ to: '/' });
+      return;
+    }
+
     async function load() {
       if (!user) return;
 
@@ -56,7 +63,7 @@ function LessonsPage() {
         const items: LessonItem[] = [];
         for (const d of data) {
           const video = d.videos as unknown as { grade_level: string; thumbnail_url: string | null; video_url: string | null; status: string } | null;
-          if (role === 'admin' || video?.status === 'published') {
+          if (video?.status === 'published') {
             items.push({
               id: d.id,
               title: d.title,
@@ -72,7 +79,7 @@ function LessonsPage() {
       setLoading(false);
     }
     if (!authLoading && user) load();
-  }, [user, role, authLoading]);
+  }, [authLoading, navigate, user]);
 
   const filteredLessons = gradeFilter === 'all'
     ? lessons
@@ -119,8 +126,7 @@ function LessonsPage() {
           )}
         </div>
 
-        {/* Progress bar */}
-        {filteredLessons.length > 0 && role === 'learner' && (
+        {filteredLessons.length > 0 && (
           <div className="mt-6 rounded-xl bg-card p-5 shadow ring-1 ring-border">
             <div className="flex items-center justify-between text-base font-semibold">
               <span className="text-foreground">Your Progress</span>

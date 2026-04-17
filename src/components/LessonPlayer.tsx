@@ -13,7 +13,10 @@ import {
   clampProgress,
   getActiveChunk,
   getActiveWord,
+  getDisplayChunk,
   getChunkWords,
+  normalizeChunks,
+  normalizeWords,
 } from '@/components/lesson-player/utils';
 
 type Props = {
@@ -34,6 +37,7 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Load lesson data directly from Supabase
   useEffect(() => {
@@ -75,6 +79,7 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
           sort_order: c.sort_order,
         }));
         setChunks(loadedChunks);
+        setEngWords([]);
 
         // Get eng_words for all chunks
         if (loadedChunks.length > 0) {
@@ -116,21 +121,49 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
 
   // Sync video time
   const handleTimeUpdate = useCallback(() => {
-    if (videoRef.current) setVideoTime(videoRef.current.currentTime);
+    if (!videoRef.current) return;
+
+    const nextTime = videoRef.current.currentTime;
+    setVideoTime((previousTime) => (Math.abs(previousTime - nextTime) > 0.01 ? nextTime : previousTime));
+    setIsPlaying(!videoRef.current.paused && !videoRef.current.ended);
   }, []);
 
   const handleLoadedMetadata = useCallback(() => {
     if (videoRef.current) {
-      setDuration(videoRef.current.duration || 0);
+      setDuration(Number.isFinite(videoRef.current.duration) ? videoRef.current.duration : 0);
       videoRef.current.playbackRate = playbackRate;
+      handleTimeUpdate();
     }
-  }, [playbackRate]);
+  }, [handleTimeUpdate, playbackRate]);
 
   const seekToTime = useCallback((time: number) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, time);
-    setVideoTime(Math.max(0, time));
-  }, []);
+    const boundedTime = Math.max(0, Math.min(time, duration || time));
+    videoRef.current.currentTime = boundedTime;
+    setVideoTime(boundedTime);
+    setIsPlaying(!videoRef.current.paused && !videoRef.current.ended);
+  }, [duration]);
+
+  useEffect(() => {
+    if (!isPlaying || !videoRef.current) return;
+
+    const syncPlaybackTime = () => {
+      if (!videoRef.current) return;
+
+      const nextTime = videoRef.current.currentTime;
+      setVideoTime((previousTime) => (Math.abs(previousTime - nextTime) > 0.016 ? nextTime : previousTime));
+      animationFrameRef.current = window.requestAnimationFrame(syncPlaybackTime);
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(syncPlaybackTime);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isPlaying]);
 
   // Mark lesson complete when video ends
   const handleVideoEnded = useCallback(async () => {
@@ -150,18 +183,22 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
     }
   }, [user, lessonId, completed]);
 
-  const activeChunk = useMemo(() => getActiveChunk(chunks, videoTime), [chunks, videoTime]);
-  const activeWord = useMemo(() => getActiveWord(engWords, videoTime), [engWords, videoTime]);
+  const normalizedChunks = useMemo(() => normalizeChunks(chunks, duration), [chunks, duration]);
+  const normalizedWords = useMemo(() => normalizeWords(engWords, normalizedChunks, duration), [engWords, normalizedChunks, duration]);
+  const activeChunk = useMemo(() => getActiveChunk(normalizedChunks, videoTime), [normalizedChunks, videoTime]);
+  const activeWord = useMemo(() => getActiveWord(normalizedWords, videoTime), [normalizedWords, videoTime]);
+  const currentChunk = useMemo(() => getDisplayChunk(normalizedChunks, videoTime), [normalizedChunks, videoTime]);
   const chunkWords = useMemo(
-    () => getChunkWords(engWords, activeChunk?.id),
-    [engWords, activeChunk?.id]
+    () => getChunkWords(normalizedWords, currentChunk?.id),
+    [currentChunk?.id, normalizedWords]
   );
-  const visibleWords = chunkWords.length > 0 ? chunkWords : buildFallbackWords(activeChunk);
+  const visibleWords = chunkWords.length > 0 ? chunkWords : buildFallbackWords(currentChunk);
   const hasWordTiming = chunkWords.length > 0;
   const segmentProgress = activeChunk
     ? clampProgress(((videoTime - activeChunk.start_sec) / Math.max(activeChunk.end_sec - activeChunk.start_sec, 0.001)) * 100)
     : 0;
-  const canStep = chunks.length > 0;
+  const canStep = normalizedChunks.length > 0;
+  const currentChunkIndex = currentChunk ? normalizedChunks.findIndex((chunk) => chunk.id === currentChunk.id) + 1 : 0;
 
   const togglePlayback = useCallback(async () => {
     if (!videoRef.current) return;
@@ -193,21 +230,32 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   }, [seekToTime]);
 
   const stepToChunk = useCallback((direction: 'backward' | 'forward') => {
-    if (chunks.length === 0) return;
+    if (normalizedChunks.length === 0) return;
 
-    const currentIndex = activeChunk
-      ? chunks.findIndex((chunk) => chunk.id === activeChunk.id)
-      : chunks.findIndex((chunk) => chunk.start_sec > videoTime);
+    const activeIndex = activeChunk
+      ? normalizedChunks.findIndex((chunk) => chunk.id === activeChunk.id)
+      : -1;
+    const upcomingIndex = normalizedChunks.findIndex((chunk) => chunk.start_sec > videoTime + 0.01);
+    const previousIndex = [...normalizedChunks].reverse().findIndex((chunk) => chunk.start_sec < videoTime - 0.01);
 
-    const fallbackIndex = currentIndex === -1 ? (direction === 'forward' ? 0 : chunks.length - 1) : currentIndex;
-    const nextIndex = direction === 'forward'
-      ? Math.min(fallbackIndex + (activeChunk ? 1 : 0), chunks.length - 1)
-      : Math.max(fallbackIndex - 1, 0);
+    let nextIndex = 0;
 
-    seekToTime(chunks[nextIndex].start_sec);
+    if (direction === 'forward') {
+      if (activeIndex >= 0) {
+        nextIndex = Math.min(activeIndex + 1, normalizedChunks.length - 1);
+      } else {
+        nextIndex = upcomingIndex >= 0 ? upcomingIndex : normalizedChunks.length - 1;
+      }
+    } else if (activeIndex >= 0) {
+      nextIndex = Math.max(activeIndex - 1, 0);
+    } else if (previousIndex >= 0) {
+      nextIndex = normalizedChunks.length - 1 - previousIndex;
+    }
+
+    seekToTime(normalizedChunks[nextIndex].start_sec);
     videoRef.current?.pause();
     setIsPlaying(false);
-  }, [activeChunk, chunks, seekToTime, videoTime]);
+  }, [activeChunk, normalizedChunks, seekToTime, videoTime]);
 
   const cyclePlaybackRate = useCallback(() => {
     const speeds = [0.75, 1, 1.25];
@@ -240,63 +288,79 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-muted-foreground">SASL Read lesson</p>
+    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+      <div className="max-w-3xl">
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-muted-foreground">Learner lesson view</p>
         <h1 className="mt-2 text-3xl font-bold text-foreground sm:text-4xl">{lessonTitle}</h1>
         <p className="mt-3 text-lg text-muted-foreground">
-          Watch the signs, follow the highlighted English words, pause, replay, and practise each segment at your own pace.
+          Watch the sign on the left and follow the guided English karaoke track on the right as each word lights up in rhythm.
         </p>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-[2rem] border border-border/70 bg-card shadow-[0_28px_80px_-40px_color-mix(in_oklab,var(--color-primary)_40%,transparent)]">
-        {videoUrl ? (
-          <video
-            ref={videoRef}
-            controls
-            className="w-full bg-muted"
-            onTimeUpdate={handleTimeUpdate}
-            onEnded={handleVideoEnded}
-            onLoadedMetadata={handleLoadedMetadata}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onSeeked={handleTimeUpdate}
-          >
-            <source src={videoUrl} />
-            Your browser does not support the video tag.
-          </video>
-        ) : (
-          <div className="flex aspect-video items-center justify-center text-lg text-muted-foreground">
-            Video not available
+      <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.85fr)] xl:items-start">
+        <section className="space-y-5">
+          <div className="overflow-hidden rounded-[2rem] border border-border/70 bg-card shadow-[0_28px_80px_-40px_color-mix(in_oklab,var(--color-primary)_40%,transparent)]">
+            {videoUrl ? (
+              <video
+                ref={videoRef}
+                className="aspect-video w-full bg-muted object-cover"
+                onTimeUpdate={handleTimeUpdate}
+                onEnded={handleVideoEnded}
+                onLoadedMetadata={handleLoadedMetadata}
+                onDurationChange={handleLoadedMetadata}
+                onPlay={() => {
+                  setIsPlaying(true);
+                  handleTimeUpdate();
+                }}
+                onPause={() => {
+                  setIsPlaying(false);
+                  handleTimeUpdate();
+                }}
+                onSeeked={handleTimeUpdate}
+                playsInline
+                preload="metadata"
+              >
+                <source src={videoUrl} />
+                Your browser does not support the video tag.
+              </video>
+            ) : (
+              <div className="flex aspect-video items-center justify-center text-lg text-muted-foreground">
+                Video not available
+              </div>
+            )}
           </div>
-        )}
+
+          <PlayerControls
+            completed={completed}
+            canStep={canStep}
+            currentTime={videoTime}
+            duration={duration}
+            isPlaying={isPlaying}
+            playbackRate={playbackRate}
+            onReplay={replayLesson}
+            onSeek={seekToTime}
+            onStepBackward={() => stepToChunk('backward')}
+            onTogglePlay={togglePlayback}
+            onStepForward={() => stepToChunk('forward')}
+            onCyclePlaybackRate={cyclePlaybackRate}
+          />
+        </section>
+
+        <aside className="xl:sticky xl:top-24">
+          <KaraokeCaption
+            currentChunk={currentChunk}
+            activeChunk={activeChunk}
+            activeWord={activeWord}
+            visibleWords={visibleWords}
+            segmentProgress={segmentProgress}
+            hasWordTiming={hasWordTiming}
+            segmentIndex={currentChunkIndex}
+            totalSegments={normalizedChunks.length}
+          />
+        </aside>
       </div>
 
-      <div className="mt-6">
-        <KaraokeCaption
-          activeChunk={activeChunk}
-          activeWord={activeWord}
-          visibleWords={visibleWords}
-          segmentProgress={segmentProgress}
-          hasWordTiming={hasWordTiming}
-        />
-      </div>
-
-      <div className="mt-6">
-        <PlayerControls
-          completed={completed}
-          canStep={canStep}
-          isPlaying={isPlaying}
-          playbackRate={playbackRate}
-          onReplay={replayLesson}
-          onStepBackward={() => stepToChunk('backward')}
-          onTogglePlay={togglePlayback}
-          onStepForward={() => stepToChunk('forward')}
-          onCyclePlaybackRate={cyclePlaybackRate}
-        />
-      </div>
-
-      <div className="mt-8 text-center">
+      <div className="mt-8 text-center xl:text-left">
         <Button variant="outline" size="lg" asChild>
           <Link to="/lessons">← Back to Lessons</Link>
         </Button>

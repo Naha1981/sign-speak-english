@@ -1,10 +1,16 @@
-import { Link } from '@tanstack/react-router';
-import { LogOut, BookOpen, Video, Upload, Menu, Users, User } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { LogOut, BookOpen, Menu, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import type { AppRole } from '@/hooks/use-auth';
 import type { User as SupaUser } from '@supabase/supabase-js';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+import { useIsMobile } from '@/hooks/use-mobile';
+
+const DESKTOP_GESTURE_WINDOW_MS = 250;
+const MOBILE_LONG_PRESS_MS = 3000;
 
 interface AppHeaderProps {
   user: SupaUser | null;
@@ -17,29 +23,7 @@ function NavLinks({ role, onSignOut, onClose }: { role: AppRole | null; onSignOu
 
   return (
     <>
-      {role === 'admin' && (
-        <>
-          <Button variant="ghost" size="lg" asChild onClick={handleClick}>
-            <Link to="/dashboard">
-              <Video className="mr-2 h-5 w-5" />
-              Dashboard
-            </Link>
-          </Button>
-          <Button variant="ghost" size="lg" asChild onClick={handleClick}>
-            <Link to="/upload">
-              <Upload className="mr-2 h-5 w-5" />
-              Upload
-            </Link>
-          </Button>
-          <Button variant="ghost" size="lg" asChild onClick={handleClick}>
-            <Link to="/admin/users">
-              <Users className="mr-2 h-5 w-5" />
-              Learners
-            </Link>
-          </Button>
-        </>
-      )}
-      {role === 'learner' && (
+      {(role === 'learner' || role === 'admin') && (
         <Button variant="ghost" size="lg" asChild onClick={handleClick}>
           <Link to="/lessons">
             <BookOpen className="mr-2 h-5 w-5" />
@@ -63,16 +47,91 @@ function NavLinks({ role, onSignOut, onClose }: { role: AppRole | null; onSignOu
 
 export function AppHeader({ user, role, onSignOut }: AppHeaderProps) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const clickTimeoutRef = useRef<number | null>(null);
+  const longPressTimeoutRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  const openAdminView = useCallback(() => {
+    if (role !== 'admin') {
+      toast('Admin tools are hidden for this account.', { duration: 1800 });
+      return;
+    }
+
+    navigate({ to: '/dashboard' });
+  }, [navigate, role]);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimeoutRef.current !== null) {
+      window.clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleLogoClick = useCallback(() => {
+    if (isMobile) {
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        return;
+      }
+
+      navigate({ to: '/' });
+      return;
+    }
+
+    if (clickTimeoutRef.current !== null) {
+      window.clearTimeout(clickTimeoutRef.current);
+      clickTimeoutRef.current = null;
+      openAdminView();
+      return;
+    }
+
+    clickTimeoutRef.current = window.setTimeout(() => {
+      navigate({ to: '/' });
+      clickTimeoutRef.current = null;
+    }, DESKTOP_GESTURE_WINDOW_MS);
+  }, [isMobile, navigate, openAdminView]);
+
+  const handleLogoPointerDown = useCallback(() => {
+    if (!isMobile) return;
+
+    longPressTriggeredRef.current = false;
+    clearLongPress();
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      openAdminView();
+    }, MOBILE_LONG_PRESS_MS);
+  }, [clearLongPress, isMobile, openAdminView]);
+
+  useEffect(() => {
+    return () => {
+      clearLongPress();
+
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, [clearLongPress]);
 
   return (
     <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link to="/" className="flex items-center gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-2"
+          onClick={handleLogoClick}
+          onPointerDown={handleLogoPointerDown}
+          onPointerUp={clearLongPress}
+          onPointerLeave={clearLongPress}
+          onPointerCancel={clearLongPress}
+          aria-label="Go home"
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
             <BookOpen className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="text-xl font-bold text-foreground tracking-tight">SASL Read</span>
-        </Link>
+        </button>
 
         {user && (
           <>

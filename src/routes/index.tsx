@@ -50,12 +50,7 @@ function Index() {
                 Watch SASL videos with karaoke-style word highlighting. No audio needed — learn at your own pace.
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
-                {role === 'admin' && (
-                  <Button size="lg" asChild className="h-14 px-8 text-lg">
-                    <Link to="/dashboard">Go to Dashboard</Link>
-                  </Button>
-                )}
-                <Button size="lg" variant={role === 'admin' ? 'outline' : 'default'} asChild className="h-14 px-8 text-lg">
+                <Button size="lg" asChild className="h-14 px-8 text-lg">
                   <Link to="/lessons">Browse Lessons</Link>
                 </Button>
               </div>
