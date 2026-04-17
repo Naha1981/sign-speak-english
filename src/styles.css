@@ -54,14 +54,6 @@
   --font-body: var(--font-body);
 }
 
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-}
-
 :root {
   --radius: 0.75rem;
   --font-display: 'Inter', system-ui, sans-serif;
