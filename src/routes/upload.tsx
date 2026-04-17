@@ -11,6 +11,31 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Upload, Loader2 } from 'lucide-react';
 
+const MAX_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
+
+function getSafeExtension(file: File) {
+  const extension = file.name.split('.').pop()?.trim().toLowerCase();
+  return extension || 'mp4';
+}
+
+async function getVideoDuration(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    return await new Promise<number>((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        resolve(Number.isFinite(video.duration) ? video.duration : 0);
+      };
+      video.onerror = () => reject(new Error('Could not read the selected video file.'));
+      video.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export const Route = createFileRoute('/upload')({
   head: () => ({
     meta: [
@@ -28,6 +53,7 @@ function UploadPage() {
   const [gradeLevel, setGradeLevel] = useState('Grade 1-3');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || role !== 'admin')) {
@@ -36,22 +62,58 @@ function UploadPage() {
   }, [user, role, authLoading, navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFile(e.target.files?.[0] ?? null);
+    const nextFile = e.target.files?.[0] ?? null;
+
+    if (!nextFile) {
+      setFile(null);
+      setFileError(null);
+      return;
+    }
+
+    if (!nextFile.type.startsWith('video/')) {
+      setFile(null);
+      setFileError('Please choose a valid video file.');
+      return;
+    }
+
+    if (nextFile.size > MAX_UPLOAD_SIZE_BYTES) {
+      setFile(null);
+      setFileError('This video is too large. Please upload a file under 500 MB.');
+      return;
+    }
+
+    setFile(nextFile);
+    setFileError(null);
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !file || uploading) return;
 
+    if (!title.trim()) {
+      toast.error('Please enter a lesson title.');
+      return;
+    }
+
+    if (fileError) {
+      toast.error(fileError);
+      return;
+    }
+
     setUploading(true);
     try {
+      const durationSec = await getVideoDuration(file);
+
       // 1. Upload video to Supabase Storage
-      const fileExt = file.name.split('.').pop();
+      const fileExt = getSafeExtension(file);
       const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('videos')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          contentType: file.type || 'video/mp4',
+          upsert: false,
+        });
 
       if (uploadError) {
         throw new Error(`Storage upload failed: ${uploadError.message}`);
@@ -69,12 +131,13 @@ function UploadPage() {
       const { data: videoRecord, error: videoError } = await supabase
         .from('videos')
         .insert({
-          title,
+          title: title.trim(),
           grade_level: gradeLevel,
           language: 'SASL',
           status: 'draft',
           video_url: urlData.publicUrl,
           created_by: user.id,
+          thumbnail_url: urlData.publicUrl,
         })
         .select()
         .single();
@@ -88,7 +151,7 @@ function UploadPage() {
         .from('lessons')
         .insert({
           video_id: videoRecord.id,
-          title,
+          title: title.trim(),
           created_by: user.id,
         })
         .select()
@@ -97,6 +160,12 @@ function UploadPage() {
       if (lessonError) {
         throw new Error(`Failed to create lesson: ${lessonError.message}`);
       }
+
+      console.info('[Upload] Created lesson', {
+        lessonId: lesson.id,
+        videoId: videoRecord.id,
+        durationSec,
+      });
 
       toast.success('Video uploaded! Redirecting to lesson editor...');
       navigate({ to: '/editor/$lessonId', params: { lessonId: lesson.id } });
@@ -172,9 +241,10 @@ function UploadPage() {
                   className="h-12 text-lg file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-base file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
                 />
                 <p className="text-sm text-muted-foreground">Supports MP4, WebM, MOV, AVI and other video formats.</p>
+                {fileError && <p className="text-sm font-medium text-destructive">{fileError}</p>}
               </div>
 
-              <Button type="submit" size="lg" className="w-full h-14 text-lg font-semibold" disabled={uploading || !file}>
+              <Button type="submit" size="lg" className="w-full h-14 text-lg font-semibold" disabled={uploading || !file || !!fileError}>
                 {uploading ? (
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 ) : (
