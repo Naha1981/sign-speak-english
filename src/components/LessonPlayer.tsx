@@ -1,28 +1,20 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-
-interface EngWord {
-  id: string;
-  word: string;
-  start_sec: number;
-  end_sec: number;
-  word_order: number;
-  chunk_id: string;
-}
-
-interface Chunk {
-  id: string;
-  start_sec: number;
-  end_sec: number;
-  sasl_gloss: string | null;
-  english_text: string;
-  sort_order: number;
-}
+import { KaraokeCaption } from '@/components/lesson-player/KaraokeCaption';
+import { PlayerControls } from '@/components/lesson-player/PlayerControls';
+import type { Chunk, EngWord } from '@/components/lesson-player/types';
+import {
+  buildFallbackWords,
+  clampProgress,
+  getActiveChunk,
+  getActiveWord,
+  getChunkWords,
+} from '@/components/lesson-player/utils';
 
 type Props = {
   lessonId: string;
@@ -36,6 +28,9 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [engWords, setEngWords] = useState<EngWord[]>([]);
   const [videoTime, setVideoTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -60,6 +55,9 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
         setLessonTitle(lesson.title);
         const video = lesson.videos as unknown as { video_url: string | null };
         setVideoUrl(video?.video_url ?? null);
+        setVideoTime(0);
+        setDuration(0);
+        setIsPlaying(false);
 
         // Get chunks
         const { data: chunkData } = await supabase
@@ -121,8 +119,22 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
     if (videoRef.current) setVideoTime(videoRef.current.currentTime);
   }, []);
 
+  const handleLoadedMetadata = useCallback(() => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration || 0);
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
+  const seekToTime = useCallback((time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = Math.max(0, time);
+    setVideoTime(Math.max(0, time));
+  }, []);
+
   // Mark lesson complete when video ends
   const handleVideoEnded = useCallback(async () => {
+    setIsPlaying(false);
     if (!user || completed) return;
     const { error: err } = await supabase
       .from('lesson_progress')
@@ -138,9 +150,75 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
     }
   }, [user, lessonId, completed]);
 
-  // Find current active chunk and word
-  const activeChunk = chunks.find(c => videoTime >= c.start_sec && videoTime < c.end_sec);
-  const activeWordIndex = engWords.findIndex(w => videoTime >= w.start_sec && videoTime < w.end_sec);
+  const activeChunk = useMemo(() => getActiveChunk(chunks, videoTime), [chunks, videoTime]);
+  const activeWord = useMemo(() => getActiveWord(engWords, videoTime), [engWords, videoTime]);
+  const chunkWords = useMemo(
+    () => getChunkWords(engWords, activeChunk?.id),
+    [engWords, activeChunk?.id]
+  );
+  const visibleWords = chunkWords.length > 0 ? chunkWords : buildFallbackWords(activeChunk);
+  const hasWordTiming = chunkWords.length > 0;
+  const segmentProgress = activeChunk
+    ? clampProgress(((videoTime - activeChunk.start_sec) / Math.max(activeChunk.end_sec - activeChunk.start_sec, 0.001)) * 100)
+    : 0;
+  const canStep = chunks.length > 0;
+
+  const togglePlayback = useCallback(async () => {
+    if (!videoRef.current) return;
+
+    try {
+      if (videoRef.current.paused) {
+        await videoRef.current.play();
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    } catch {
+      toast.error('Unable to control video playback');
+    }
+  }, []);
+
+  const replayLesson = useCallback(async () => {
+    if (!videoRef.current) return;
+
+    seekToTime(0);
+
+    try {
+      await videoRef.current.play();
+      setIsPlaying(true);
+    } catch {
+      toast.error('Unable to restart the lesson');
+    }
+  }, [seekToTime]);
+
+  const stepToChunk = useCallback((direction: 'backward' | 'forward') => {
+    if (chunks.length === 0) return;
+
+    const currentIndex = activeChunk
+      ? chunks.findIndex((chunk) => chunk.id === activeChunk.id)
+      : chunks.findIndex((chunk) => chunk.start_sec > videoTime);
+
+    const fallbackIndex = currentIndex === -1 ? (direction === 'forward' ? 0 : chunks.length - 1) : currentIndex;
+    const nextIndex = direction === 'forward'
+      ? Math.min(fallbackIndex + (activeChunk ? 1 : 0), chunks.length - 1)
+      : Math.max(fallbackIndex - 1, 0);
+
+    seekToTime(chunks[nextIndex].start_sec);
+    videoRef.current?.pause();
+    setIsPlaying(false);
+  }, [activeChunk, chunks, seekToTime, videoTime]);
+
+  const cyclePlaybackRate = useCallback(() => {
+    const speeds = [0.75, 1, 1.25];
+    const currentIndex = speeds.indexOf(playbackRate);
+    const nextRate = speeds[(currentIndex + 1) % speeds.length];
+    setPlaybackRate(nextRate);
+
+    if (videoRef.current) {
+      videoRef.current.playbackRate = nextRate;
+    }
+  }, [playbackRate]);
 
   if (loading) {
     return (
@@ -162,18 +240,27 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-      <h1 className="mb-4 text-center text-2xl font-bold text-foreground sm:text-3xl">{lessonTitle}</h1>
+    <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-3xl text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-muted-foreground">SASL Read lesson</p>
+        <h1 className="mt-2 text-3xl font-bold text-foreground sm:text-4xl">{lessonTitle}</h1>
+        <p className="mt-3 text-lg text-muted-foreground">
+          Watch the signs, follow the highlighted English words, pause, replay, and practise each segment at your own pace.
+        </p>
+      </div>
 
-      {/* Video */}
-      <div className="overflow-hidden rounded-xl bg-foreground/5">
+      <div className="mt-8 overflow-hidden rounded-[2rem] border border-border/70 bg-card shadow-[0_28px_80px_-40px_color-mix(in_oklab,var(--color-primary)_40%,transparent)]">
         {videoUrl ? (
           <video
             ref={videoRef}
             controls
-            className="w-full"
+            className="w-full bg-muted"
             onTimeUpdate={handleTimeUpdate}
             onEnded={handleVideoEnded}
+            onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onSeeked={handleTimeUpdate}
           >
             <source src={videoUrl} />
             Your browser does not support the video tag.
@@ -185,54 +272,31 @@ export const LessonPlayer: React.FC<Props> = ({ lessonId }) => {
         )}
       </div>
 
-      {/* Karaoke display */}
-      <div className="mt-6 rounded-xl bg-card p-6 shadow ring-1 ring-border">
-        {engWords.length > 0 ? (
-          <>
-            {/* SASL Gloss line */}
-            {activeChunk?.sasl_gloss && (
-              <p className="mb-3 text-center font-mono text-base text-muted-foreground tracking-wider">
-                {activeChunk.sasl_gloss}
-              </p>
-            )}
-            {/* English words - karaoke style */}
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xl sm:text-2xl leading-relaxed">
-              {engWords.map((word, i) => {
-                const isActive = i === activeWordIndex;
-                return (
-                  <span
-                    key={word.id}
-                    className={`transition-all duration-200 rounded px-1 ${
-                      isActive
-                        ? 'font-bold text-primary bg-primary/10 scale-110'
-                        : videoTime > word.end_sec
-                          ? 'text-muted-foreground'
-                          : 'text-foreground'
-                    }`}
-                  >
-                    {word.word}
-                  </span>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <p className="text-center text-lg text-muted-foreground">
-            No subtitles available for this lesson yet.
-          </p>
-        )}
+      <div className="mt-6">
+        <KaraokeCaption
+          activeChunk={activeChunk}
+          activeWord={activeWord}
+          visibleWords={visibleWords}
+          segmentProgress={segmentProgress}
+          hasWordTiming={hasWordTiming}
+        />
       </div>
 
-      {/* Completion badge */}
-      {completed && (
-        <div className="mt-4 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-base font-semibold text-primary">
-            ✅ Lesson Completed
-          </span>
-        </div>
-      )}
+      <div className="mt-6">
+        <PlayerControls
+          completed={completed}
+          canStep={canStep}
+          isPlaying={isPlaying}
+          playbackRate={playbackRate}
+          onReplay={replayLesson}
+          onStepBackward={() => stepToChunk('backward')}
+          onTogglePlay={togglePlayback}
+          onStepForward={() => stepToChunk('forward')}
+          onCyclePlaybackRate={cyclePlaybackRate}
+        />
+      </div>
 
-      <div className="mt-6 text-center">
+      <div className="mt-8 text-center">
         <Button variant="outline" size="lg" asChild>
           <Link to="/lessons">← Back to Lessons</Link>
         </Button>
