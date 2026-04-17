@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -12,6 +12,7 @@ interface AuthState {
 }
 
 export function useAuth() {
+  const isMountedRef = useRef(true);
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -20,36 +21,51 @@ export function useAuth() {
   });
 
   const fetchRole = useCallback(async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', userId)
       .maybeSingle();
+
+    if (error) {
+      console.error('[Auth] Failed to load role', error.message);
+    }
+
     return (data?.role as AppRole) ?? 'learner';
   }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    const applySession = async (session: Session | null) => {
+      if (!isMountedRef.current) return;
+
+      if (!session?.user) {
+        setState({ user: null, session: null, role: null, loading: false });
+        return;
+      }
+
+      const role = await fetchRole(session.user.id);
+
+      if (!isMountedRef.current) return;
+
+      setState({ user: session.user, session, role, loading: false });
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          const role = await fetchRole(session.user.id);
-          setState({ user: session.user, session, role, loading: false });
-        } else {
-          setState({ user: null, session: null, role: null, loading: false });
-        }
+      (_event, session) => {
+        void applySession(session);
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const role = await fetchRole(session.user.id);
-        setState({ user: session.user, session, role, loading: false });
-      } else {
-        setState({ user: null, session: null, role: null, loading: false });
-      }
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      void applySession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMountedRef.current = false;
+      subscription.unsubscribe();
+    };
   }, [fetchRole]);
 
   const signIn = useCallback(async (email: string, password: string) => {
